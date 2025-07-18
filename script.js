@@ -255,17 +255,83 @@ const enemyImgs = [
 const bulletImg = new Image();
 bulletImg.src = 'images/bubble_bullet.png';
 
-const bgmFiles = [
-  'sounds/background1.mp3',
-  'sounds/background2.mp3',
-  'sounds/background3.mp3'
-];
-let bgmIndex = 0;
-let bgmAudio = new Audio(bgmFiles[bgmIndex]);
-// Set BGM volume - 50% louder for PC, normal for mobile
+// sounds 폴더의 모든 배경음악 파일을 순서대로 재생하는 시스템
+let bgmFiles = []; // 배경음악 파일 경로 배열
+let bgmIndex = 0;  // 현재 재생 중인 음악의 인덱스
+let bgmAudio = null; // 배경음악 오디오 객체
+
+// 파일 존재 여부 확인 함수
+function checkFileExists(url) {
+  return fetch(url, { method: 'HEAD', cache: 'no-store' })
+    .then(response => response.ok)
+    .catch(() => false);
+}
+
+// 배경음악 파일 목록 초기화
+function initBgmFiles() {
+  // 기존 목록 초기화
+  bgmFiles = [];
+  
+  // 배경음악 파일 검색 (최대 100개)
+  for (let i = 1; i <= 100; i++) {
+    const filepath = `sounds/background${i}.mp3`;
+    // 배열에 모든 파일 경로 추가
+    bgmFiles.push(filepath);
+  }
+}
+
+// 배경음악 목록 초기화
+initBgmFiles();
+
+// 초기 오디오 객체 생성
+bgmAudio = new Audio(bgmFiles[0]);
+
+// 볼륨 설정 - PC에서는 더 크게, 모바일에서는 작게
 const isMobileBGM = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 bgmAudio.volume = isMobileBGM ? 0.021 : 0.126;
-bgmAudio.loop = false; // loop를 false로 설정하여 sound-loader.js의 이벤트 리스너가 처리하도록 함
+bgmAudio.loop = false; // 반복 재생 대신 onended 이벤트로 다음 곡 재생
+
+// 배경음악이 끝날 때 다음 음악으로 넘어가는 함수
+function playNextBgm() {
+  // 다음 음악 인덱스로 이동 (마지막 음악 재생 후 첫번째로 돌아가기)
+  bgmIndex = (bgmIndex + 1) % bgmFiles.length;
+  
+  // 한 바퀴 다 돌았으면 파일 목록 다시 초기화 (새 파일 추가 감지)
+  if (bgmIndex === 0) {
+    console.log("모든 배경음악 재생 완료, 다시 처음부터 재생");
+    initBgmFiles();
+  }
+  
+  console.log(`다음 배경음악 재생: ${bgmIndex+1}`);
+  
+  // 새 오디오 객체 생성
+  bgmAudio = new Audio(bgmFiles[bgmIndex]);
+  
+  // 재생 지연을 방지하기 위해 미리 로드
+  bgmAudio.preload = "auto";
+  
+  // 볼륨 설정
+  bgmAudio.volume = isMuted ? 0 : (isMobileBGM ? 0.021 : 0.126);
+  bgmAudio.loop = false;
+  
+  // 이벤트 핸들러 다시 설정
+  bgmAudio.onended = function() {
+    // 즉시 다음 곡 재생 (지연 없이)
+    playNextBgm();
+  };
+  
+  // 음악 재생 - 지연 없이 바로 시작
+  bgmAudio.play().catch(error => {
+    console.error('배경음악 재생 오류, 즉시 다음 곡으로 넘어갑니다');
+    // 오류 발생 시 즉시 다음 음악으로 넘어감 (지연 제거)
+    playNextBgm();
+  });
+}
+
+// 초기 이벤트 핸들러 설정
+bgmAudio.onended = function() {
+  playNextBgm();
+};
 
 const volumeBtn = document.getElementById('volumeBtn');
 let isMuted = false;
@@ -433,6 +499,8 @@ volumeBtn.onclick = function () {
       bgmAudio.play().catch(e => console.error("BGM play on unmute error:", e));
     }
   }
+  
+  updateVolumeIcon();
   
   // 배경음악 플레이어 제어 (추가)
   const backgroundMusicPlayer = document.getElementById('backgroundMusicPlayer');
@@ -4106,17 +4174,35 @@ function startGame() {
   if (bgmAudio) { 
     bgmAudio.pause(); 
   }
+  
+  // 게임 시작 시 배경음악 파일 목록 초기화
+  initBgmFiles();
+  
+  // 게임 시작 시 항상 첫 번째 음악부터 재생
+  bgmIndex = 0;
   bgmAudio = new Audio(bgmFiles[bgmIndex]);
+  
+  // 재생 지연을 방지하기 위해 미리 로드 설정
+  bgmAudio.preload = "auto";
+  
   // Set BGM volume - 50% louder for PC, normal for mobile
   const isMobileBGMGame = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   bgmAudio.volume = isMuted ? 0 : (isMobileBGMGame ? 0.021 : 0.126); 
-  bgmAudio.loop = true;
+  bgmAudio.loop = false; // 끝나면 다음 음악으로 넘어가도록 loop 비활성화
+  
+  // 배경음악이 끝났을 때 다음 음악 재생
+  bgmAudio.onended = function() {
+    // 즉시 다음 곡 재생 (지연 없이)
+    playNextBgm();
+  };
   
   // 배경 음악 재생
   const playPromise = bgmAudio.play();
   if (playPromise !== undefined) {
     playPromise.catch(error => { 
-      console.error('BGM play error on start:', error); 
+      console.error('BGM play error on start:', error);
+      // 첫 번째 음악 재생 실패 시 즉시 다음 음악 시도
+      playNextBgm();
     });
   }
   if (coffeeSteamVideo && coffeeVideoAssetReady) {
@@ -4187,7 +4273,12 @@ function togglePause() {
   } else {
     pauseButton.textContent = 'PAUSE';
     if (bgmAudio && bgmAudio.paused && !isMuted) {
-        bgmAudio.play().catch(e => console.error("BGM resume error:", e));
+      // 일시정지 후 재생 재개
+      bgmAudio.play().catch(e => {
+        console.error("BGM resume error:", e);
+        // 오류 발생 시 다음 곡으로 넘어감
+        setTimeout(playNextBgm, 500);
+      });
     }
     if (coffeeSteamVideo && coffeeSteamVideo.paused && coffeeVideoAssetReady) {
         coffeeSteamVideo.play().catch(error => console.error("Error resuming coffee steam video:", error));
